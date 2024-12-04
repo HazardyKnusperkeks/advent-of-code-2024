@@ -7,6 +7,31 @@
 #include <ranges>
 #include <string_view>
 
+template<typename T = std::size_t>
+struct Coordinate {
+    T Row;
+    T Column;
+
+    constexpr bool operator==(const Coordinate&) const noexcept  = default;
+    constexpr auto operator<=>(const Coordinate&) const noexcept = default;
+
+    Coordinate left(void) const noexcept {
+        return {Row, Column - 1};
+    }
+
+    Coordinate right(void) const noexcept {
+        return {Row, Column + 1};
+    }
+
+    Coordinate up(void) const noexcept {
+        return {Row - 1, Column};
+    }
+
+    Coordinate down(void) const noexcept {
+        return {Row + 1, Column};
+    }
+};
+
 template<bool SkipEmpty = true>
 constexpr auto splitString(const std::string_view data, const char delimiter) noexcept {
     auto split = data | std::views::split(delimiter) | std::views::transform([](const auto& subRange) noexcept {
