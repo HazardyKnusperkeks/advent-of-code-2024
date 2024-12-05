@@ -17,6 +17,8 @@ Project {
             "challenge3.hpp",
             "challenge4.cpp",
             "challenge4.hpp",
+            "challenge5.cpp",
+            "challenge5.hpp",
             "coordinate3d.hpp",
             "helper.cpp",
             "helper.hpp",
