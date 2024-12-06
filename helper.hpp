@@ -6,11 +6,51 @@
 #include <optional>
 #include <ranges>
 #include <string_view>
+#include <utility>
+#include <vector>
 
-template<typename T = std::size_t>
+enum class Direction { Up = 1 << 0, Down = 1 << 1, Left = 1 << 2, Right = 1 << 3 };
+
+inline Direction turnRight(Direction dir) noexcept {
+    switch ( dir ) {
+        using enum Direction;
+        case Up    : return Right;
+        case Down  : return Left;
+        case Left  : return Up;
+        case Right : return Down;
+    } //switch ( dir )
+    std::unreachable();
+}
+
+inline Direction turnLeft(Direction dir) noexcept {
+    switch ( dir ) {
+        using enum Direction;
+        case Up    : return Left;
+        case Down  : return Right;
+        case Left  : return Down;
+        case Right : return Up;
+    } //switch ( dir )
+    std::unreachable();
+}
+
+inline Direction turnAround(Direction dir) noexcept {
+    switch ( dir ) {
+        using enum Direction;
+        case Up    : return Down;
+        case Down  : return Up;
+        case Left  : return Right;
+        case Right : return Left;
+    } //switch ( dir )
+    std::unreachable();
+}
+
+template<typename T>
 struct Coordinate {
     T Row;
     T Column;
+
+    static inline T MaxRow{};
+    static inline T MaxColumn{};
 
     constexpr bool operator==(const Coordinate&) const noexcept  = default;
     constexpr auto operator<=>(const Coordinate&) const noexcept = default;
@@ -29,6 +69,49 @@ struct Coordinate {
 
     Coordinate down(void) const noexcept {
         return {Row + 1, Column};
+    }
+
+    bool isValid(void) const noexcept {
+        return Row >= 0 && Row < MaxRow && Column >= 0 && Column < MaxColumn;
+    }
+
+    Coordinate& move(Direction where) noexcept {
+        switch ( where ) {
+            using enum Direction;
+            case Up    : *this = up(); break;
+            case Down  : *this = down(); break;
+            case Left  : *this = left(); break;
+            case Right : *this = right(); break;
+        } //switch ( where )
+        return *this;
+    }
+
+    Coordinate moved(Direction where) const noexcept {
+        auto ret = *this;
+        return ret.move(where);
+    }
+};
+
+namespace std {
+template<typename T>
+struct hash<Coordinate<T>> {
+    size_t operator()(const Coordinate<T>& c) const noexcept {
+        std::hash<T> h;
+        return h(c.Row << 8) ^ h(c.Column);
+    }
+};
+} //namespace std
+
+struct MapView {
+    const std::vector<std::string_view>& Base;
+
+    MapView(const std::vector<std::string_view>& base) noexcept : Base{base} {
+        return;
+    }
+
+    template<typename T>
+    auto operator[](const Coordinate<T>& coordinate) const noexcept {
+        return Base[static_cast<std::size_t>(coordinate.Row)][static_cast<std::size_t>(coordinate.Column)];
     }
 };
 
