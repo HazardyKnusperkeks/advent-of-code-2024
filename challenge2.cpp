@@ -53,11 +53,6 @@ bool isDampenedSafeImpl(const std::vector<std::int64_t>& distances, bool already
         return isDampenedSafeImpl(copy, /*alreadyInverted=*/true);
     } //if ( !alreadyInverted )
 
-    myPrint("Not Fixable:");
-    for ( auto d : distances ) {
-        myPrint(" {:}", -d);
-    }
-    myPrint("\n");
     return false;
 }
 
