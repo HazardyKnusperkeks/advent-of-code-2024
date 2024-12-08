@@ -44,7 +44,30 @@ inline Direction turnAround(Direction dir) noexcept {
     std::unreachable();
 }
 
-template<typename T>
+template<std::integral T>
+struct CoordinateOffset {
+    T Row;
+    T Column;
+
+    constexpr bool operator==(const CoordinateOffset&) const noexcept  = default;
+    constexpr auto operator<=>(const CoordinateOffset&) const noexcept = default;
+
+    CoordinateOffset operator*(T factor) const noexcept {
+        auto ret{*this};
+        ret *= factor;
+        return ret;
+    }
+
+    CoordinateOffset& operator*=(T factor) noexcept {
+        Row    *= factor;
+        Column *= factor;
+        return *this;
+    }
+};
+
+struct MapView;
+
+template<std::integral T>
 struct Coordinate {
     T Row;
     T Column;
@@ -90,6 +113,24 @@ struct Coordinate {
         auto ret = *this;
         return ret.move(where);
     }
+
+    CoordinateOffset<T> operator-(Coordinate that) const noexcept {
+        return {Row - that.Row, Column - that.Column};
+    }
+
+    Coordinate operator+(CoordinateOffset<T> offset) const noexcept {
+        auto ret{*this};
+        ret += offset;
+        return ret;
+    }
+
+    Coordinate& operator+=(CoordinateOffset<T> offset) noexcept {
+        Row    += offset.Row;
+        Column += offset.Column;
+        return *this;
+    }
+
+    static void setMaxFromMap(MapView map);
 };
 
 namespace std {
@@ -109,7 +150,7 @@ struct MapView {
         return;
     }
 
-    template<typename T>
+    template<std::integral T>
     auto operator[](const Coordinate<T>& coordinate) const noexcept {
         return Base[static_cast<std::size_t>(coordinate.Row)][static_cast<std::size_t>(coordinate.Column)];
     }
@@ -155,6 +196,15 @@ inline double convertDouble(std::string_view input) {
     throwIfInvalid(result.ec == std::errc{});
     throwIfInvalid(result.ptr != input.data());
     return ret;
+}
+
+template<std::integral T>
+void Coordinate<T>::setMaxFromMap(MapView map) {
+    throwIfInvalid(!map.Base.empty());
+    throwIfInvalid(!map.Base.front().empty());
+    MaxRow    = static_cast<T>(map.Base.size());
+    MaxColumn = static_cast<T>(map.Base.front().size());
+    return;
 }
 
 #endif //HELPER_HPP
