@@ -22,7 +22,7 @@
 #include "challenge6.hpp"
 #include "challenge7.hpp"
 #include "challenge8.hpp"
-// #include "challenge9.hpp"
+#include "challenge9.hpp"
 #include "helper.hpp"
 #include "print.hpp"
 
@@ -144,7 +144,7 @@ int main(int argc, const char* argv[]) {
                 case 6  : runAndAdd(challenge6); break;
                 case 7  : runAndAdd(challenge7); break;
                 case 8  : runAndAdd(challenge8); break;
-                // case 9  : runAndAdd(challenge9); break;
+                case 9  : runAndAdd(challenge9); break;
                 // case 10 : runAndAdd(challenge10); break;
                 // case 11 : runAndAdd(challenge11); break;
                 // case 12 : runAndAdd(challenge12); break;
