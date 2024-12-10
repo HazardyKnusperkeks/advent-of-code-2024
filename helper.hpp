@@ -1,6 +1,7 @@
 #ifndef HELPER_HPP
 #define HELPER_HPP
 
+#include <array>
 #include <charconv>
 #include <cstdint>
 #include <optional>
@@ -130,7 +131,23 @@ struct Coordinate {
         return *this;
     }
 
+    auto neighbors(void) const noexcept {
+        return std::array{moved(Direction::Up), moved(Direction::Right), moved(Direction::Down),
+                          moved(Direction::Left)};
+    }
+
+    auto validNeighbors(void) const noexcept {
+        return neighbors() | std::views::filter([](Coordinate c) noexcept { return c.isValid(); });
+    }
+
     static void setMaxFromMap(MapView map);
+
+    static auto allPositions(void) noexcept {
+        return std::views::cartesian_product(std::views::iota(T{0}, MaxRow), std::views::iota(T{0}, MaxColumn)) |
+               std::views::transform([](auto rowAndColumn) noexcept {
+                   return Coordinate{std::get<0>(rowAndColumn), std::get<1>(rowAndColumn)};
+               });
+    }
 };
 
 namespace std {

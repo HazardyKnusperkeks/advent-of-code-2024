@@ -1,5 +1,5 @@
 #include "challenge1.hpp"
-// #include "challenge10.hpp"
+#include "challenge10.hpp"
 // #include "challenge11.hpp"
 // #include "challenge12.hpp"
 // #include "challenge13.hpp"
@@ -145,7 +145,7 @@ int main(int argc, const char* argv[]) {
                 case 7  : runAndAdd(challenge7); break;
                 case 8  : runAndAdd(challenge8); break;
                 case 9  : runAndAdd(challenge9); break;
-                // case 10 : runAndAdd(challenge10); break;
+                case 10 : runAndAdd(challenge10); break;
                 // case 11 : runAndAdd(challenge11); break;
                 // case 12 : runAndAdd(challenge12); break;
                 // case 13 : runAndAdd(challenge13); break;
