@@ -131,6 +131,12 @@ struct Coordinate {
         return *this;
     }
 
+    Coordinate& operator-=(CoordinateOffset<T> offset) noexcept {
+        Row    -= offset.Row;
+        Column -= offset.Column;
+        return *this;
+    }
+
     auto neighbors(void) const noexcept {
         return std::array{moved(Direction::Up), moved(Direction::Right), moved(Direction::Down),
                           moved(Direction::Left)};
