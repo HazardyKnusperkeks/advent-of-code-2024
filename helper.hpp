@@ -167,9 +167,13 @@ struct hash<Coordinate<T>> {
 } //namespace std
 
 struct MapView {
-    const std::vector<std::string_view>& Base;
+    std::span<const std::string_view> Base;
 
     MapView(const std::vector<std::string_view>& base) noexcept : Base{base} {
+        return;
+    }
+
+    MapView(std::span<const std::string_view> base) noexcept : Base{base} {
         return;
     }
 
