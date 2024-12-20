@@ -4,6 +4,7 @@
 #include <array>
 #include <charconv>
 #include <cstdint>
+#include <format>
 #include <optional>
 #include <ranges>
 #include <string_view>
@@ -63,6 +64,10 @@ struct CoordinateOffset {
         Row    *= factor;
         Column *= factor;
         return *this;
+    }
+
+    T length(void) const noexcept {
+        return std::abs(Row) + std::abs(Column);
     }
 };
 
@@ -162,6 +167,23 @@ struct hash<Coordinate<T>> {
     size_t operator()(const Coordinate<T>& c) const noexcept {
         std::hash<T> h;
         return h(c.Row << 8) ^ h(c.Column);
+    }
+};
+
+template<typename T>
+struct formatter<Coordinate<T>, char> {
+    template<typename Context>
+    constexpr auto parse(Context& ctx) {
+        auto iter = ctx.begin();
+        if ( *iter != '}' ) {
+            throw std::format_error{"We don't parse!"};
+        } //if ( *iter != '}' )
+        return iter;
+    }
+
+    template<typename Context>
+    auto format(const Coordinate<T>& c, Context& ctx) const {
+        return std::format_to(ctx.out(), "{:3d} / {:3d}", c.Row, c.Column);
     }
 };
 } //namespace std
