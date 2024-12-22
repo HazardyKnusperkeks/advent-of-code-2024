@@ -54,7 +54,7 @@ struct SearchState {
     std::vector<PerMonkeyValidIndices>   ValidIndices;
 };
 
-void searchBestPriceSum(const SearchState& state, int level = 0) noexcept {
+void searchBestPriceSum(SearchState& state, int level = 0) noexcept {
     if ( level == 4 ) {
         auto countBananas = [&state](const SearchState::PerMonkeyValidIndices& perMonkey) noexcept {
             return state.Offsets[perMonkey.MonkeyIndex][perMonkey.ValidIndices.front()].first;
@@ -64,19 +64,28 @@ void searchBestPriceSum(const SearchState& state, int level = 0) noexcept {
         return;
     } //if ( level == 4 )
 
-    auto plusOne = [](std::size_t& index) noexcept {
-        ++index;
-        return;
+    auto applyPlusOne = [](SearchState::PerMonkeyValidIndices& perMonkey) noexcept {
+        auto plusOne = [](std::size_t& index) noexcept {
+            ++index;
+            return;
+        };
+        std::ranges::for_each(perMonkey.ValidIndices, plusOne);
     };
+
+    std::ranges::for_each(state.ValidIndices, applyPlusOne);
 
     for ( auto nextOffset : std::views::iota(-9, 10) ) {
         SearchState nextState = state;
 
-        for ( auto& [monkeyIndex, validIndices] : nextState.ValidIndices ) {
-            std::ranges::for_each(validIndices, plusOne);
+        for ( auto [inner, outer] : std::views::zip(nextState.ValidIndices, state.ValidIndices) ) {
+            auto& [monkeyIndex, validIndices] = inner;
+            auto& [_, outerValidIndexes]      = outer;
+            // std::ranges::for_each(validIndices, plusOne);
             std::erase_if(validIndices, [&nextState, nextOffset, monkeyIndex](std::size_t index) noexcept {
                 return nextState.Offsets[monkeyIndex][index].second != nextOffset;
             });
+            auto newEnd = std::ranges::set_difference(outerValidIndexes, validIndices, outerValidIndexes.begin()).out;
+            outerValidIndexes.erase(newEnd, outerValidIndexes.end());
         } //for ( auto& [monkeyIndex, validIndices] : nextState.ValidIndices )
 
         std::erase_if(nextState.ValidIndices, &SearchState::PerMonkeyValidIndices::isEmpty);
