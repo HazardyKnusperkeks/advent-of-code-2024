@@ -30,26 +30,64 @@ SecretNumbers generateSecretNumbers(std::int64_t secret) noexcept {
 OffsetsAndPrices toOffsets(const SecretNumbers& numbers) noexcept {
     OffsetsAndPrices ret;
     ret.resize(numbers.size());
-    ret[0] = {1234, 0}; //Invalid change
+    ret[0] = {0, 1234}; //Invalid change
     std::ranges::transform(numbers | std::views::slide(2), std::next(ret.begin()), [](auto secretNumbers) noexcept {
         auto previousPrice = secretNumbers.front() % 10;
         auto curretPrice   = secretNumbers.back() % 10;
-        return std::pair{curretPrice, previousPrice - curretPrice};
+        return std::pair{curretPrice, curretPrice - previousPrice};
     });
     return ret;
 }
 
-auto tupleToArray(std::tuple<std::int64_t, std::int64_t, std::int64_t, std::int64_t> t) noexcept {
-    return std::array{std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
-}
+struct SearchState {
+    struct PerMonkeyValidIndices {
+        std::size_t              MonkeyIndex;
+        std::vector<std::size_t> ValidIndices;
 
-std::int64_t findPrice(const OffsetsAndPrices& offsetsAndPrices, std::array<std::int64_t, 4> changeSequence) noexcept {
-    auto range = std::ranges::search(offsetsAndPrices, changeSequence, {}, &OffsetsAndPrices::value_type::second);
-    return range.empty() ? 0 : range.back().first;
+        bool isEmpty(void) const noexcept {
+            return ValidIndices.empty();
+        }
+    };
+
+    const std::vector<OffsetsAndPrices>& Offsets;
+    std::int64_t&                        BestCostSum;
+    std::vector<PerMonkeyValidIndices>   ValidIndices;
+};
+
+void searchBestPriceSum(const SearchState& state, int level = 0) noexcept {
+    if ( level == 4 ) {
+        auto countBananas = [&state](const SearchState::PerMonkeyValidIndices& perMonkey) noexcept {
+            return state.Offsets[perMonkey.MonkeyIndex][perMonkey.ValidIndices.front()].first;
+        };
+        auto sum = std::ranges::fold_left(state.ValidIndices | std::views::transform(countBananas), 0, std::plus<>{});
+        state.BestCostSum = std::max(state.BestCostSum, sum);
+        return;
+    } //if ( level == 4 )
+
+    auto plusOne = [](std::size_t& index) noexcept {
+        ++index;
+        return;
+    };
+
+    for ( auto nextOffset : std::views::iota(-9, 10) ) {
+        SearchState nextState = state;
+
+        for ( auto& [monkeyIndex, validIndices] : nextState.ValidIndices ) {
+            std::ranges::for_each(validIndices, plusOne);
+            std::erase_if(validIndices, [&nextState, nextOffset, monkeyIndex](std::size_t index) noexcept {
+                return nextState.Offsets[monkeyIndex][index].second != nextOffset;
+            });
+        } //for ( auto& [monkeyIndex, validIndices] : nextState.ValidIndices )
+
+        std::erase_if(nextState.ValidIndices, &SearchState::PerMonkeyValidIndices::isEmpty);
+
+        if ( std::ssize(nextState.ValidIndices) * 9 > state.BestCostSum ) {
+            searchBestPriceSum(nextState, level + 1);
+        } //if ( std::ssize(nextState.ValidIndices) * 9 > state.BestCostSum )
+    } //for ( auto nextOffset : std::views::iota(-9, 10) )
+    return;
 }
 } //namespace
-
-#include <chrono>
 
 bool challenge22(const std::vector<std::string_view>& input) {
     const auto secretNumbers = input | std::views::transform(convert<10>) |
@@ -59,34 +97,19 @@ bool challenge22(const std::vector<std::string_view>& input) {
         std::plus<>{});
     myPrint(" == Result of Part 1: {:d} ==\n", sum1);
 
-    auto       validChanges     = std::views::iota(-9, 10);
-    auto       changeSequences  = std::views::cartesian_product(validChanges, validChanges, validChanges, validChanges);
-    const auto offsetsAndPrices = secretNumbers | std::views::transform(toOffsets) | std::ranges::to<std::vector>();
-    const auto sumDisintegrateable =
-        std::ranges::max(changeSequences | std::views::transform(tupleToArray) |
-                         std::views::transform([&offsetsAndPrices, bestPriceSum = std::int64_t{0}](
-                                                   const std::array<std::int64_t, 4>& changeSequence) mutable noexcept {
-                             static int i                         = 0;
-                             using Clock                          = std::chrono::system_clock;
-                             auto           now                   = Clock::now();
-                             std::int64_t   priceSum              = 0;
-                             constexpr auto averagePricePerSecret = 3; //A realstic upper bound.
-                             std::int64_t   reachablePriceSum = averagePricePerSecret * std::ssize(offsetsAndPrices);
-                             for ( const OffsetsAndPrices& offsets : offsetsAndPrices ) {
-                                 auto price         = findPrice(offsets, changeSequence);
-                                 reachablePriceSum -= averagePricePerSecret - price;
-                                 if ( reachablePriceSum < bestPriceSum ) {
-                                     break;
-                                 } //if ( reachablePriceSum < bestPriceSum )
-                                 priceSum += price;
-                             } //for ( const OffsetsAndPrices& offsets : offsetsAndPrices )
-                             bestPriceSum = std::max(bestPriceSum, priceSum);
-                             auto dur     = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - now);
-                             myPrint("Change Sequence {:6d} done after {:7.2f}ms with {:4d} (Best {:4d})\n", ++i,
-                                     dur.count() / 1000., priceSum, bestPriceSum);
-                             return priceSum;
-                         }));
-    myPrint(" == Result of Part 2: {:d} ==\n", sumDisintegrateable);
+    const auto   offsetsAndPrices = secretNumbers | std::views::transform(toOffsets) | std::ranges::to<std::vector>();
+    std::int64_t bestPriceSum     = 0;
+    SearchState  state{
+        offsetsAndPrices, bestPriceSum,
+        std::views::iota(0zu, offsetsAndPrices.size()) |
+            std::views::transform([allIndices = std::views::iota(0zu, secretNumbers.front().size() - 4) |
+                                                std::ranges::to<std::vector>()](std::size_t monkeyIndex) noexcept {
+                return SearchState::PerMonkeyValidIndices{monkeyIndex, allIndices};
+            }) |
+            std::ranges::to<std::vector>()};
 
-    return sum1 == 15'608'699'004 && sumDisintegrateable == 1791;
+    searchBestPriceSum(state);
+    myPrint(" == Result of Part 2: {:d} ==\n", bestPriceSum);
+
+    return sum1 == 15'608'699'004 && bestPriceSum == 1791;
 }
