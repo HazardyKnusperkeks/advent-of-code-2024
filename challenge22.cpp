@@ -32,9 +32,9 @@ OffsetsAndPrices toOffsets(const SecretNumbers& numbers) noexcept {
     ret.resize(numbers.size());
     ret[0] = {1234, 0}; //Invalid change
     std::ranges::transform(numbers | std::views::slide(2), std::next(ret.begin()), [](auto secretNumbers) noexcept {
-        auto previousPrize = secretNumbers.front() % 10;
-        auto curretPrize   = secretNumbers.back() % 10;
-        return std::pair{curretPrize, previousPrize - curretPrize};
+        auto previousPrice = secretNumbers.front() % 10;
+        auto curretPrice   = secretNumbers.back() % 10;
+        return std::pair{curretPrice, previousPrice - curretPrice};
     });
     return ret;
 }
@@ -43,12 +43,14 @@ auto tupleToArray(std::tuple<std::int64_t, std::int64_t, std::int64_t, std::int6
     return std::array{std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
 }
 
-std::int64_t findPrize(const OffsetsAndPrices& offsetsAndPrizes, std::array<std::int64_t, 4> changeSequence) noexcept {
-    auto range = std::ranges::search(offsetsAndPrizes, changeSequence, {}, &OffsetsAndPrices::value_type::second);
+std::int64_t findPrice(const OffsetsAndPrices& offsetsAndPrices, std::array<std::int64_t, 4> changeSequence) noexcept {
+    auto range = std::ranges::search(offsetsAndPrices, changeSequence, {}, &OffsetsAndPrices::value_type::second);
     return range.empty() ? 0 : range.back().first;
 }
 } //namespace
+
 #include <chrono>
+
 bool challenge22(const std::vector<std::string_view>& input) {
     const auto secretNumbers = input | std::views::transform(convert<10>) |
                                std::views::transform(generateSecretNumbers) | std::ranges::to<std::vector>();
@@ -60,22 +62,30 @@ bool challenge22(const std::vector<std::string_view>& input) {
     auto       validChanges     = std::views::iota(-9, 10);
     auto       changeSequences  = std::views::cartesian_product(validChanges, validChanges, validChanges, validChanges);
     const auto offsetsAndPrices = secretNumbers | std::views::transform(toOffsets) | std::ranges::to<std::vector>();
-    const auto sumDisintegrateable = std::ranges::max(
-        changeSequences | std::views::transform(tupleToArray) |
-        std::views::transform([&offsetsAndPrices](std::array<std::int64_t, 4> changeSequence) noexcept {
-            static int i = 0;
-            using Clock  = std::chrono::system_clock;
-            auto now     = Clock::now();
-            auto ret     = std::ranges::fold_left(
-                offsetsAndPrices | std::views::transform([&changeSequence](const OffsetsAndPrices& offsets) noexcept {
-                    return findPrize(offsets, changeSequence);
-                }),
-                0, std::plus<>{});
-            auto dur = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - now);
-            myPrint("Change Sequence {:6d} done after {:7.2f}ms\n", ++i, dur.count() /1000.);
-            myFlush();
-            return ret;
-        }));
+    const auto sumDisintegrateable =
+        std::ranges::max(changeSequences | std::views::transform(tupleToArray) |
+                         std::views::transform([&offsetsAndPrices, bestPriceSum = std::int64_t{0}](
+                                                   const std::array<std::int64_t, 4>& changeSequence) mutable noexcept {
+                             static int i                         = 0;
+                             using Clock                          = std::chrono::system_clock;
+                             auto           now                   = Clock::now();
+                             std::int64_t   priceSum              = 0;
+                             constexpr auto averagePricePerSecret = 3; //A realstic upper bound.
+                             std::int64_t   reachablePriceSum = averagePricePerSecret * std::ssize(offsetsAndPrices);
+                             for ( const OffsetsAndPrices& offsets : offsetsAndPrices ) {
+                                 auto price         = findPrice(offsets, changeSequence);
+                                 reachablePriceSum -= averagePricePerSecret - price;
+                                 if ( reachablePriceSum < bestPriceSum ) {
+                                     break;
+                                 } //if ( reachablePriceSum < bestPriceSum )
+                                 priceSum += price;
+                             } //for ( const OffsetsAndPrices& offsets : offsetsAndPrices )
+                             bestPriceSum = std::max(bestPriceSum, priceSum);
+                             auto dur     = std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - now);
+                             myPrint("Change Sequence {:6d} done after {:7.2f}ms with {:4d} (Best {:4d})\n", ++i,
+                                     dur.count() / 1000., priceSum, bestPriceSum);
+                             return priceSum;
+                         }));
     myPrint(" == Result of Part 2: {:d} ==\n", sumDisintegrateable);
 
     return sum1 == 15'608'699'004 && sumDisintegrateable == 1791;
