@@ -3,8 +3,10 @@
 
 #include <array>
 #include <charconv>
+#include <coroutine>
 #include <cstdint>
 #include <format>
+#include <generator>
 #include <optional>
 #include <ranges>
 #include <string_view>
@@ -254,6 +256,18 @@ void Coordinate<T>::setMaxFromMap(MapView map) {
     MaxRow    = static_cast<T>(map.Base.size());
     MaxColumn = static_cast<T>(map.Base.front().size());
     return;
+}
+
+template<typename Range, typename ReturnType = const std::ranges::range_value_t<Range>&>
+std::generator<std::pair<ReturnType, ReturnType>> symmetricCartesianProduct(Range&& range) noexcept {
+    auto begin = std::ranges::begin(range);
+    auto end   = std::ranges::end(range);
+
+    for ( auto i = begin; i != end; ++i ) {
+        for ( auto j = std::next(i); j != end; ++j ) {
+            co_yield std::pair{*i, *j};
+        } //for ( auto j = std::next(i); j != end; ++j )
+    } //for ( auto i = begin; i != end; ++i )
 }
 
 #endif //HELPER_HPP

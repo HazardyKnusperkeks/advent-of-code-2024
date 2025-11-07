@@ -4,8 +4,6 @@
 #include "print.hpp"
 
 #include <algorithm>
-#include <coroutine>
-#include <generator>
 #include <ranges>
 #include <unordered_map>
 
@@ -60,19 +58,6 @@ NetworkMap pruneMap(NetworkMap map) noexcept {
         } //else -> if ( startsWithT(iter->first).starts_with('t') || std::ranges::any_of(iter->second, startsWithT) )
     } //while ( iter != map.end() )
     return map;
-}
-
-template<typename Range>
-std::generator<std::pair<const typename Range::value_type&, const typename Range::value_type&>>
-symmetricCartesianProduct(const Range& range) noexcept {
-    auto begin = std::ranges::begin(range);
-    auto end   = std::ranges::end(range);
-
-    for ( auto i = begin; i != end; ++i ) {
-        for ( auto j = std::next(i); j != end; ++j ) {
-            co_yield std::pair{*i, *j};
-        } //for ( auto j = std::next(i); j != end; ++j )
-    } //for ( auto i = begin; i != end; ++i )
 }
 
 auto countThreeCliquesWithT(const NetworkMap& map) noexcept {
