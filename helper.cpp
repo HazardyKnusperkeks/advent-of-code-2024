@@ -11,3 +11,8 @@ void throwIfInvalid(bool valid, const char* msg) {
     } //if ( !valid )
     return;
 }
+
+void fail(void) {
+    throwIfInvalid(false, "Fail");
+    std::unreachable();
+}

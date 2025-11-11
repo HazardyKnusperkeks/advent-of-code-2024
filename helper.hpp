@@ -3,6 +3,7 @@
 
 #include <array>
 #include <charconv>
+#include <chrono>
 #include <coroutine>
 #include <cstdint>
 #include <format>
@@ -221,6 +222,7 @@ constexpr auto splitString(const std::string_view data, const char delimiter) no
 }
 
 void throwIfInvalid(bool valid, const char* msg = "Invalid Data");
+[[noreturn]] void fail(void);
 
 template<int Base = 10>
 inline std::optional<std::int64_t> convertOptionally(std::string_view input) {
@@ -268,6 +270,10 @@ std::generator<std::pair<ReturnType, ReturnType>> symmetricCartesianProduct(Rang
             co_yield std::pair{*i, *j};
         } //for ( auto j = std::next(i); j != end; ++j )
     } //for ( auto i = begin; i != end; ++i )
+}
+
+inline auto now(void) noexcept {
+    return std::chrono::system_clock::now();
 }
 
 #endif //HELPER_HPP

@@ -3,10 +3,10 @@
 #include "helper.hpp"
 #include "print.hpp"
 
-#include <algorithm>
 #include <iterator>
-#include <numeric>
 #include <ranges>
+#include <set>
+#include <unordered_map>
 
 using namespace std::string_view_literals;
 
@@ -29,21 +29,59 @@ struct Computer {
     std::int64_t B;
     std::int64_t C;
 
-    std::string_view                          ProgramString;
-    std::vector<std::int64_t>                 Program;
-    std::vector<std::int64_t>::const_iterator Pc;
-    std::string                               Output;
+    std::string_view                         ProgramString;
+    std::vector<std::int8_t>                 Program;
+    std::vector<std::int8_t>::const_iterator Pc;
+    std::vector<std::int8_t>                 Output;
 
-    void compute(void) noexcept {
+    bool performNextOperation(void) noexcept {
+        return perform(static_cast<Operation>(*Pc), static_cast<std::uint8_t>(*std::next(Pc)));
+    }
+
+    std::string compute(void) noexcept {
         Pc = Program.begin();
         Output.clear();
         while ( Pc != Program.end() ) {
-            perform(static_cast<Operation>(*Pc), static_cast<std::uint8_t>(*std::next(Pc)));
+            performNextOperation();
         } //while ( Pc != Program.end() )
-        if ( !Output.empty() ) {
-            Output.pop_back();
-        } //if ( !Output.empty() )
+
+        auto output = Output | std::views::transform([](std::int8_t c) {
+                          std::string ret{"0,"};
+                          ret[0] += c;
+                          return ret;
+                      }) |
+                      std::views::join | std::ranges::to<std::string>();
+        if ( !output.empty() ) {
+            output.pop_back();
+        } //if ( !output.empty() )
+        return output;
+    }
+
+    void reset(std::int64_t a) noexcept {
+        A = a;
+        B = 0;
+        C = 0;
+        Output.clear();
+        Pc = Program.begin();
         return;
+    }
+
+    bool computeToOut(void) noexcept {
+        for ( auto keepGoing = true; keepGoing && Pc != Program.end(); ) {
+            keepGoing = !performNextOperation();
+        } //for ( auto keepGoing = true; keepGoing && Pc != Program.end(); )
+        return Pc != Program.end();
+    }
+
+    void tryToMatchProgram(void) noexcept {
+        for ( auto index = 0zu; index < Program.size(); ++index ) {
+            if ( !computeToOut() ) {
+                break;
+            }
+            if ( Output[index] != Program[index] ) {
+                break;
+            }
+        }
     }
 
     std::int64_t getValue(ComboOperand operand) const noexcept {
@@ -61,7 +99,7 @@ struct Computer {
         return 0;
     }
 
-    void perform(Operation op, std::uint8_t operand) noexcept {
+    bool perform(Operation op, std::uint8_t operand) noexcept {
         auto getCombo = [this, &operand](void) noexcept { return getValue(static_cast<ComboOperand>(operand)); };
         auto div      = [this, &getCombo](void) noexcept { return A / (1 << getCombo()); };
 
@@ -73,22 +111,18 @@ struct Computer {
             case bxl : B ^= operand; break;
             case bst : B = getCombo() & 0x7; break;
             case bxc : B ^= C; break;
-            case out : {
-                Output += static_cast<char>('0' + (getCombo() & 0x7));
-                Output += ',';
-                break;
-            } //case out
+            case out : Output.push_back(getCombo() & 0x7); break;
             case jnz : {
                 if ( A != 0 ) {
                     Pc = std::next(Program.begin(), operand);
-                    return;
+                    return false;
                 } //if ( A != 0 )
                 break;
             } //case jnz
         } //switch ( op )
 
         std::advance(Pc, 2);
-        return;
+        return op == Operation::out;
     }
 };
 
@@ -112,245 +146,73 @@ Computer parse(std::span<const std::string_view> input) {
     auto code = input[4];
     throwIfInvalid(code.starts_with("Program: "));
     ret.ProgramString = code.substr("Program: "sv.size());
-    ret.Program =
-        splitString(ret.ProgramString, ',') | std::views::transform(convert<10>) | std::ranges::to<std::vector>();
+    ret.Program       = splitString(ret.ProgramString, ',') | std::views::transform(convert<10>) |
+                  std::views::transform([](auto x) noexcept { return static_cast<std::int8_t>(x); }) |
+                  std::ranges::to<std::vector>();
 
     return ret;
 }
 
-struct MyIota {
-    std::int64_t Begin;
-    std::int64_t End;
+std::int64_t findCopyA(Computer& computer) {
+    auto shift = 99u;
+    for ( auto index = 0zu; index < computer.Program.size(); index += 2 ) {
+        if ( computer.Program[index] == std::to_underlying(Operation::adv) ) {
+            shift = static_cast<std::uint32_t>(computer.Program[index + 1]);
+            break;
+        } //if ( computer.Program[index] == std::to_underlying(Operation::adv) )
+    } //for ( auto index = 0zu; index < computer.Program.size(); index += 2 )
+    throwIfInvalid(shift <= 3);
 
-    MyIota(std::int64_t begin, std::int64_t end) noexcept : Begin{begin}, End{end} {
-        return;
-    }
+    constexpr auto magic7    = 7u;
+    const auto     inputBits = magic7 + shift;
 
-    struct iterator {
-        using value_type        = std::int64_t;
-        using reference_type    = value_type;
-        using pointer_type      = const value_type*;
-        using iterator_category = std::random_access_iterator_tag;
-        using difference_type   = value_type;
+    const auto cache         = std::views::iota(0, 1 << inputBits) | std::views::transform([&computer](std::int64_t a) {
+                           computer.reset(a);
+                           throwIfInvalid(computer.computeToOut());
+                           return std::pair<std::int64_t, std::int8_t>{a, computer.Output.front()};
+                       }) |
+                       std::ranges::to<std::unordered_map>();
 
-        std::int64_t Current;
+    std::set<std::int64_t> results;
 
-        auto operator<=>(const iterator&) const noexcept = default;
+    auto recurse = [&results, &cache, &computer, &shift, &inputBits](this auto& self, const std::int64_t a,
+                                                                     const std::size_t index) noexcept {
+        if ( index == computer.Program.size() ) {
+            results.insert(a);
+            return;
+        } //if ( index == computer.Program.size() )
 
-        reference_type operator*(void) const noexcept {
-            return Current;
-        }
+        for ( std::int64_t bits : std::views::iota(0, 1 << shift) ) {
+            const auto nextShift = inputBits + (index - 1) * shift;
+            const auto nextA     = a | (bits << nextShift);
+            const auto input     = nextA >> (index * shift);
 
-        iterator& operator++(void) noexcept {
-            ++Current;
-            return *this;
-        }
-
-        iterator operator++(int) noexcept {
-            auto ret{*this};
-            operator++();
-            return ret;
-        }
-
-        iterator& operator--(void) noexcept {
-            --Current;
-            return *this;
-        }
-
-        iterator operator--(int) noexcept {
-            auto ret{*this};
-            operator--();
-            return ret;
-        }
-
-        difference_type operator-(const iterator& that) const noexcept {
-            return Current - that.Current;
-        }
-
-        iterator& operator+=(difference_type d) noexcept {
-            Current += d;
-            return *this;
-        }
-
-        iterator operator+(difference_type d) const noexcept {
-            auto ret{*this};
-            return ret += d;
-        }
-
-        friend iterator operator+(difference_type d, iterator i) noexcept {
-            return i += d;
-        }
-
-        iterator& operator-=(difference_type d) noexcept {
-            Current -= d;
-            return *this;
-        }
-
-        iterator operator-(difference_type d) const noexcept {
-            auto ret{*this};
-            return ret -= d;
-        }
-
-        reference_type operator[](difference_type d) const noexcept;
-    };
-
-    iterator begin(void) const noexcept {
-        return {Begin};
-    }
-
-    iterator end(void) const noexcept {
-        return {End};
-    }
-};
-
-static_assert(std::random_access_iterator<MyIota::iterator>);
-
-std::int64_t findCopyA(Computer& computer) noexcept {
-    //Does not work, I'm out of ideas.
-    return 0;
-    const auto programLength = computer.ProgramString.size();
-
-    int  prefix              = 127;
-    auto run                 = [&computer, &prefix](std::int64_t a) noexcept {
-        computer.A = a;
-        computer.B = 0;
-        computer.C = 0;
-        computer.compute();
-        //myPrint("{:2d} Running {:16d} => {:s}\n", prefix, a, computer.Output);
+            if ( cache.at(input) == computer.Program[index] ) {
+                self(nextA, index + 1);
+            } //if ( cache.at(input) == computer.Program[index] )
+        } //for ( auto bits : std::views::iota(0, 1 << shift) )
         return;
     };
 
-    auto mapToLength = [&run, &computer](std::int64_t a) noexcept {
-        run(a);
-        return computer.Output.size();
-    };
+    for ( auto [a, _] : cache | std::views::filter([&computer](const auto& pair) noexcept {
+                            return pair.second == computer.Program.front();
+                        }) ) {
+        recurse(a, 1);
+    } //for ( auto a : cache | std::views::filter() )
 
-    auto fullRange = MyIota{100, 100'000'000'000'000'000};
-    auto sizeRange = std::ranges::equal_range(fullRange, programLength, {}, mapToLength);
-    myPrint("\n\nFound Range: {:d}, {:d}\n\n", sizeRange.front(), sizeRange.back() - 1);
-
-    struct Range {
-        std::int64_t Lower;
-        std::int64_t Upper;
-
-        auto length(void) const noexcept {
-            return Upper - Lower;
-        }
-
-        auto midpoint(void) const noexcept {
-            return std::midpoint(Lower, Upper);
-        }
-    };
-
-    std::vector<Range> rangesToSearch{{sizeRange.front(), sizeRange.back()}};
-
-    for ( auto searchForIndex = programLength - 1; searchForIndex < programLength; searchForIndex -= 2 ) {
-        //prefix                   = searchForIndex;
-        //Looking for the range with the correct index.
-        const auto digitToSearch = computer.ProgramString[searchForIndex];
-        run(rangesToSearch.front().Lower);
-        auto lowerResult = computer.Output;
-        run(rangesToSearch.front().Upper - 1);
-        myPrint("\nLooking for Index {:d}: {:c} in\n{:16c} {:>{}c}\n{:16d} {:s}\n{:16d} {:s}\n", searchForIndex,
-                digitToSearch, ' ', 'v', searchForIndex + 1, rangesToSearch.front().Lower, lowerResult,
-                rangesToSearch.front().Upper - 1, computer.Output);
-
-        do { //while ( rangesToSearch.size() > 1 )
-            for ( auto index = rangesToSearch.size() - 1; index <= rangesToSearch.size(); --index ) {
-                auto range    = rangesToSearch[index];
-                auto midpoint = range.midpoint();
-                run(midpoint);
-
-                if ( computer.Output[searchForIndex] == digitToSearch ) {
-                    myPrint("Matched Midpoint:\n{:16d} {:s}\n", midpoint, computer.Output);
-                    //The correct value is in this range.
-                    const bool addLeft = index > 0 && (run(rangesToSearch[index - 1].Upper - 1),
-                                                       computer.Output[searchForIndex] == digitToSearch);
-                    const bool addRight =
-                        index < rangesToSearch.size() - 1 &&
-                        (run(rangesToSearch[index + 1].Lower), computer.Output[searchForIndex] == digitToSearch);
-
-                    if ( addLeft ) {
-                        range.Lower = rangesToSearch[index - 1].Lower;
-                    } //if ( addLeft )
-
-                    if ( addRight ) {
-                        range.Upper = rangesToSearch[index + 1].Upper;
-                    } //if ( addRight )
-
-                    rangesToSearch.clear();
-                    rangesToSearch.push_back(range);
-
-                    if ( addLeft || addRight ) {
-                        index = rangesToSearch.size();
-                        continue;
-                    } //if ( addLeft || addRight )
-                    break;
-                } //if ( computer.Output[searchForIndex] == digitToSearch )
-
-                rangesToSearch[index].Upper = midpoint;
-                rangesToSearch.insert(std::next(rangesToSearch.begin(), index + 1), {midpoint + 1, range.Upper});
-            } //for ( auto index = rangesToSearch.size() - 1; index <= rangesToSearch.size(); --index )
-        } while ( rangesToSearch.size() > 1 );
-
-        auto& theRange = rangesToSearch.front();
-
-        run(rangesToSearch.front().Lower);
-        lowerResult = computer.Output;
-        run(rangesToSearch.front().Upper - 1);
-        myPrint("Limited Range #1 to {:d} {:d} ({:d})\n", theRange.Lower, theRange.Upper - 1, theRange.length());
-        myPrint("{:16d} {:s}\n{:16d} {:s}\n", theRange.Lower, lowerResult, theRange.Upper - 1, computer.Output);
-        //Move lower up.
-        MyIota lowerRange{theRange.Lower, theRange.midpoint()};
-        auto   lowerBorder = std::ranges::lower_bound(
-            lowerRange, true, {}, [&run, &computer, &digitToSearch, &searchForIndex](std::int64_t a) noexcept {
-                run(a);
-                return computer.Output[searchForIndex] == digitToSearch;
-            });
-
-        //myPrint("Found Lower\n");
-
-        //Move upper down.
-        MyIota upperRange{theRange.midpoint(), theRange.Upper};
-        auto   upperBorder = std::ranges::lower_bound(
-            upperRange, true, {}, [&run, &computer, &digitToSearch, &searchForIndex](std::int64_t a) noexcept {
-                run(a);
-                return computer.Output[searchForIndex] != digitToSearch;
-            });
-        theRange.Lower = *lowerBorder;
-        theRange.Upper = *std::prev(upperBorder);
-
-        //myPrint("Found Upper\n");
-        run(rangesToSearch.front().Lower);
-        lowerResult = computer.Output;
-        run(rangesToSearch.front().Upper - 1);
-        const auto upperResult = computer.Output;
-        myPrint("Limited Range #2 to {:d} {:d} ({:d})\n", theRange.Lower, theRange.Upper - 1, theRange.length());
-        myPrint("{:16d} {:s}\n{:16d} {:s}\n", theRange.Lower, lowerResult, theRange.Upper - 1, computer.Output);
-        myFlush();
-
-        if ( theRange.length() < 50000 && false ) {
-            //Go for linear.
-            for ( ; computer.Output != computer.ProgramString; ++theRange.Lower ) {
-                run(theRange.Lower);
-            } //for ( ; computer.Output != computer.ProgramString; ++theRange.Lower )
-
-            return theRange.Lower;
-        } //if ( theRange.length() < 50000 )
-    } //for ( auto searchForIndex = programLength - 1; rangesToSearch.front().length() != 0; searchForIndex -= 2 )
-
-    return 0;
+    throwIfInvalid(!results.empty());
+    return *results.begin();
 }
 } //namespace
 
 bool challenge17(const std::vector<std::string_view>& input) {
-    auto computer = parse(input);
+    auto computer     = parse(input);
 
-    computer.compute();
-    myPrint(" == Result of Part 1: {:s} ==\n", computer.Output);
+    const auto output = computer.compute();
+    myPrint(" == Result of Part 1: {:s} ==\n", output);
 
     const auto copyA = findCopyA(computer);
     myPrint(" == Result of Part 2: {:d} ==\n", copyA);
 
-    return computer.Output == "1,5,0,1,7,4,1,0,3"sv && copyA == 1171;
+    return output == "1,5,0,1,7,4,1,0,3"sv && copyA == 47'910'079'998'866;
 }
